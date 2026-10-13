@@ -17,10 +17,12 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include <compositionengine/Display.h>
 #include <compositionengine/DisplayColorProfile.h>
 #include <compositionengine/DisplayCreationArgs.h>
+#include <compositionengine/OutputColorSetting.h>
 #include <compositionengine/RenderSurface.h>
 #include <compositionengine/impl/GpuCompositionResult.h>
 #include <compositionengine/impl/Output.h>
@@ -52,6 +54,7 @@ public:
     void setReleasedLayers(const CompositionRefreshArgs&) override;
     void setColorTransform(const CompositionRefreshArgs&) override;
     void setColorProfile(const ColorProfile&) override;
+    void updateColorProfile(const compositionengine::CompositionRefreshArgs&) override;
 
     void beginFrame() override;
     using DeviceRequestedChanges = android::HWComposer::DeviceRequestedChanges;
@@ -110,6 +113,7 @@ private:
     adpf::PowerAdvisor* mPowerAdvisor = nullptr;
     bool mHasPictureProcessing = false;
     int32_t mMaxLayerPictureProfiles = 0;
+    std::optional<OutputColorSetting> mOutputColorSetting;
 };
 
 // This template factory function standardizes the implementation details of the

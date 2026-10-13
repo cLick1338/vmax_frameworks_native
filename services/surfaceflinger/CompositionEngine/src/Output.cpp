@@ -1076,7 +1076,11 @@ ui::Dataspace Output::getBestDataspace(ui::Dataspace* outHdrDataSpace,
 
 compositionengine::Output::ColorProfile Output::pickColorProfile(
         const compositionengine::CompositionRefreshArgs& refreshArgs) const {
-    if (refreshArgs.outputColorSetting == OutputColorSetting::kUnmanaged) {
+    // Vmax: a vendor setting without its render intent is unmanaged; the HWC tells them apart
+    const bool vendorUnmanaged = refreshArgs.outputColorSetting > OutputColorSetting::kEnhanced &&
+            !mDisplayColorProfile->hasRenderIntent(
+                    static_cast<ui::RenderIntent>(refreshArgs.outputColorSetting));
+    if (refreshArgs.outputColorSetting == OutputColorSetting::kUnmanaged || vendorUnmanaged) {
         return ColorProfile{ui::ColorMode::NATIVE, ui::Dataspace::UNKNOWN,
                             ui::RenderIntent::COLORIMETRIC};
     }

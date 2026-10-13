@@ -131,6 +131,24 @@ void Display::setColorProfile(const ColorProfile& colorProfile) {
                                                               colorProfile.renderIntent);
 }
 
+// Vmax: re-send an unchanged colour mode when the colour setting changes so the HWC can re-read it
+void Display::updateColorProfile(const compositionengine::CompositionRefreshArgs& refreshArgs) {
+    const bool settingChanged = mOutputColorSetting.has_value() &&
+            *mOutputColorSetting != refreshArgs.outputColorSetting;
+    mOutputColorSetting = refreshArgs.outputColorSetting;
+
+    const auto& state = getState();
+    const auto previous = std::make_tuple(state.colorMode, state.dataspace, state.renderIntent);
+    Output::updateColorProfile(refreshArgs);
+
+    if (settingChanged && !isVirtual() &&
+        previous == std::make_tuple(state.colorMode, state.dataspace, state.renderIntent)) {
+        const auto physicalId = PhysicalDisplayId::tryCast(mId);
+        getCompositionEngine().getHwComposer().setActiveColorMode(*physicalId, state.colorMode,
+                                                                  state.renderIntent);
+    }
+}
+
 void Display::dump(std::string& out) const {
     const char* const type = isVirtual() ? "virtual" : "physical";
     base::StringAppendF(&out, "Display %s (%s, \"%s\")", to_string(mId).c_str(), type,
