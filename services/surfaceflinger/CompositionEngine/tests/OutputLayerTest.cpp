@@ -1114,6 +1114,37 @@ TEST_F(OutputLayerWriteStateToHWCTest, compositionTypeIsSetToClientIfClientCompo
                                  /*zIsOverridden*/ false, /*isPeekingThrough*/ false);
 }
 
+TEST_F(OutputLayerWriteStateToHWCTest, legacyHdrDimmingReleasesClientCompositionOnExit) {
+    mLayerFEState.compositionType = Composition::SOLID_COLOR;
+    mOutputLayer.editState().dimmingRatio = 0.125f;
+    mOutputState.legacyHdrDimming = true;
+
+    expectPerFrameCommonCalls(SimulateUnsupported::None, kDataspace,
+                              kOutputSpaceVisibleRegion, kSurfaceDamage, 0.125f);
+    expectSetColorCall();
+    expectSetCompositionTypeCall(Composition::CLIENT);
+    mOutputLayer.writeStateToHWC(false, false, 0, false, false);
+
+    mOutputState.legacyHdrDimming = false;
+    expectPerFrameCommonCalls(SimulateUnsupported::None, kDataspace,
+                              kOutputSpaceVisibleRegion, kSurfaceDamage, 0.125f);
+    expectSetColorCall();
+    expectSetCompositionTypeCall(Composition::SOLID_COLOR);
+    mOutputLayer.writeStateToHWC(false, false, 0, false, false);
+}
+
+TEST_F(OutputLayerWriteStateToHWCTest, legacyHdrDimmingKeepsUndimmedVideoOnDevice) {
+    mLayerFEState.compositionType = Composition::DEVICE;
+    mOutputLayer.editState().dimmingRatio = 1.f;
+    mOutputState.legacyHdrDimming = true;
+
+    expectPerFrameCommonCalls(SimulateUnsupported::None, kDataspace,
+                              kOutputSpaceVisibleRegion, kSurfaceDamage, 1.f);
+    expectSetHdrMetadataAndBufferCalls();
+    expectSetCompositionTypeCall(Composition::DEVICE);
+    mOutputLayer.writeStateToHWC(false, false, 0, false, false);
+}
+
 TEST_F(OutputLayerWriteStateToHWCTest, allStateIncludesMetadataIfPresent) {
     mLayerFEState.compositionType = Composition::DEVICE;
     includeGenericLayerMetadataInState();

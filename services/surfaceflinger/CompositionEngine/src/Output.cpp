@@ -887,6 +887,14 @@ void Output::planComposition() {
         return;
     }
 
+    // Vmax: Legacy HWC cannot dim cached hardware layers.
+    if (getState().legacyHdrDimming) {
+        for (auto* layer : getOutputLayersOrderedByZ()) {
+            layer->editState().overrideInfo = {};
+        }
+        return;
+    }
+
     SFTRACE_CALL();
     ALOGV(__FUNCTION__);
 
@@ -1711,7 +1719,7 @@ void Output::presentFrameAndReleaseLayers(bool flushEvenWhenDisabled) {
 
 void Output::renderCachedSets(const CompositionRefreshArgs& refreshArgs) {
     const auto& outputState = getState();
-    if (mPlanner && outputState.isEnabled) {
+    if (mPlanner && outputState.isEnabled && !outputState.legacyHdrDimming) {
         mPlanner->renderCachedSets(outputState, refreshArgs.scheduledFrameTime,
                                    outputState.usesDeviceComposition || getSkipColorTransform());
     }
@@ -1813,7 +1821,7 @@ bool Output::anyLayersRequireClientComposition() const {
 
 void Output::finishPrepareFrame() {
     const auto& state = getState();
-    if (mPlanner) {
+    if (mPlanner && !state.legacyHdrDimming) {
         mPlanner->reportFinalPlan(getOutputLayersOrderedByZ());
     }
     mRenderSurface->prepareFrame(state.usesClientComposition, state.usesDeviceComposition);

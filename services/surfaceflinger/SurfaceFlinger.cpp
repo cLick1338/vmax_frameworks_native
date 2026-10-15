@@ -2093,6 +2093,23 @@ status_t SurfaceFlinger::setDisplayBrightness(const sp<IBinder>& displayToken,
                    const bool supportsDisplayBrightnessCommand =
                            getHwComposer().getComposer()->isSupported(
                                    Hwc2::Composer::OptionalFeature::DisplayBrightnessCommand);
+                   // Vmax: Lights HAL owns the backlight; only pass HDR luminance to composition.
+                   static const bool legacyHdrDimming =
+                           base::GetBoolProperty("debug.sf.legacy_hdr_dimming", false);
+                   if (!supportsDisplayBrightnessCommand && legacyHdrDimming) {
+                       auto compositionDisplay = display->getCompositionDisplay();
+                       const bool dimming = std::isfinite(brightness.sdrWhitePointNits) &&
+                               std::isfinite(brightness.displayBrightnessNits) &&
+                               brightness.sdrWhitePointNits > 0.f &&
+                               brightness.displayBrightnessNits > brightness.sdrWhitePointNits &&
+                               brightness.displayBrightness > 0.f;
+                       compositionDisplay->editState().legacyHdrDimming = dimming;
+                       compositionDisplay->setDisplayBrightness(
+                               dimming ? brightness.sdrWhitePointNits : -1.f,
+                               dimming ? brightness.displayBrightnessNits : -1.f);
+                       scheduleComposite(FrameHint::kNone);
+                       return ftl::yield<status_t>(OK);
+                   }
                    // If we support applying display brightness as a command, then we also support
                    // dimming SDR layers.
                    if (supportsDisplayBrightnessCommand) {

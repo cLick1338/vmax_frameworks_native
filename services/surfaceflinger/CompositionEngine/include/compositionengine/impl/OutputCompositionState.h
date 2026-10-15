@@ -139,6 +139,9 @@ struct OutputCompositionState {
     // SDR white point
     float sdrWhitePointNits{-1.f};
 
+    // Vmax: Legacy HWC needs client composition for dimmed layers during HDR boost.
+    bool legacyHdrDimming{false};
+
     // Brightness of the client target, normalized to display brightness
     float clientTargetBrightness{1.f};
 

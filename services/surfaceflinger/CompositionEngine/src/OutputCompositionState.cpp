@@ -59,6 +59,7 @@ void OutputCompositionState::dump(std::string& out) const {
     out.append("\n   ");
     dumpVal(out, "displayBrightnessNits", displayBrightnessNits);
     dumpVal(out, "sdrWhitePointNits", sdrWhitePointNits);
+    dumpVal(out, "legacyHdrDimming", legacyHdrDimming);
     dumpVal(out, "clientTargetBrightness", clientTargetBrightness);
     dumpVal(out, "displayBrightness", displayBrightness);
     out.append("\n   ");

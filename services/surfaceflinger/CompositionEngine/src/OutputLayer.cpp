@@ -958,6 +958,7 @@ void OutputLayer::detectDisallowedCompositionTypeChange(Composition from, Compos
 
 bool OutputLayer::isClientCompositionForced(bool isPeekingThrough) const {
     return getState().forceClientComposition ||
+            (getOutput().getState().legacyHdrDimming && getState().dimmingRatio < 1.f) ||
             (!isPeekingThrough && getLayerFE().hasRoundedCorners());
 }
 
