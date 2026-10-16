@@ -2101,7 +2101,9 @@ status_t SurfaceFlinger::setDisplayBrightness(const sp<IBinder>& displayToken,
                        const bool dimming = std::isfinite(brightness.sdrWhitePointNits) &&
                                std::isfinite(brightness.displayBrightnessNits) &&
                                brightness.sdrWhitePointNits > 0.f &&
-                               brightness.displayBrightnessNits > brightness.sdrWhitePointNits &&
+                               // skip ratios too small to see; dimming forces GPU composition
+                               brightness.displayBrightnessNits >
+                                       brightness.sdrWhitePointNits * 1.1f &&
                                brightness.displayBrightness > 0.f;
                        compositionDisplay->editState().legacyHdrDimming = dimming;
                        compositionDisplay->setDisplayBrightness(
