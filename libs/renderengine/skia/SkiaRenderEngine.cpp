@@ -1032,7 +1032,7 @@ void SkiaRenderEngine::drawLayersInternal(
             // meantime, we'll use a workaround that works unless we need to do
             // any color conversion. The workaround requires that we pretend the
             // image is already premultiplied, so that we do not premultiply it
-            // before applying SkBlendMode::kPlus.
+            // before applying SkBlendMode::kDstATop.
             const bool useIsOpaqueWorkaround = item.isOpaque &&
                     (imageTextureRef->colorType() == kRGBA_1010102_SkColorType ||
                      imageTextureRef->colorType() == kRGBA_F16_SkColorType);
@@ -1070,7 +1070,8 @@ void SkiaRenderEngine::drawLayersInternal(
             }
 
             if (useIsOpaqueWorkaround) {
-                shader = SkShaders::Blend(SkBlendMode::kPlus, shader,
+                // Vmax: Replace alpha without clamping HDR RGB before tone mapping.
+                shader = SkShaders::Blend(SkBlendMode::kDstATop, shader,
                                           SkShaders::Color(SkColors::kBlack,
                                                            toSkColorSpace(layerDataspace)));
             }

@@ -627,7 +627,8 @@ public:
     // implementations are identical Also implicitly checks that the injected tonemap shader
     // compiles
     void tonemap(ui::Dataspace sourceDataspace, std::function<vec3(vec3)> eotf,
-                 std::function<vec3(vec3, float)> scaleOotf);
+                 std::function<vec3(vec3, float)> scaleOotf,
+                 bool opaqueTenBit = false);
 
     void initializeRenderEngine();
 
@@ -1424,7 +1425,7 @@ void RenderEngineTest::drawShadowWithoutCaster(const FloatRect& castingBounds,
 }
 
 void RenderEngineTest::tonemap(ui::Dataspace sourceDataspace, std::function<vec3(vec3)> eotf,
-                               std::function<vec3(vec3, float)> scaleOotf) {
+                               std::function<vec3(vec3, float)> scaleOotf, bool opaqueTenBit) {
     constexpr int32_t kGreyLevels = 256;
 
     const auto rect = Rect(0, 0, kGreyLevels, 1);
@@ -1442,7 +1443,9 @@ void RenderEngineTest::tonemap(ui::Dataspace sourceDataspace, std::function<vec3
     auto buf = std::make_shared<
             renderengine::impl::
                     ExternalTexture>(sp<GraphicBuffer>::make(kGreyLevels, 1,
-                                                             HAL_PIXEL_FORMAT_RGBA_8888, 1,
+                                                             opaqueTenBit ? HAL_PIXEL_FORMAT_RGBA_1010102
+                                                                          : HAL_PIXEL_FORMAT_RGBA_8888,
+                                                             1,
                                                              GRALLOC_USAGE_SW_READ_OFTEN |
                                                                      GRALLOC_USAGE_SW_WRITE_OFTEN |
                                                                      GRALLOC_USAGE_HW_RENDER |
@@ -1461,10 +1464,17 @@ void RenderEngineTest::tonemap(ui::Dataspace sourceDataspace, std::function<vec3
         for (int32_t j = 0; j < buf->getBuffer()->getHeight(); j++) {
             uint8_t* dest = pixels + (buf->getBuffer()->getStride() * j * 4);
             for (int32_t i = 0; i < buf->getBuffer()->getWidth(); i++) {
-                dest[0] = color;
-                dest[1] = color;
-                dest[2] = color;
-                dest[3] = 255;
+                if (opaqueTenBit) {
+                    const uint32_t level = (static_cast<uint32_t>(color) * 1023 + 127) / 255;
+                    // Vmax: Exercise the opaque 10-bit HDR alpha workaround.
+                    *reinterpret_cast<uint32_t*>(dest) =
+                            level | (level << 10) | (level << 20) | (3u << 30);
+                } else {
+                    dest[0] = color;
+                    dest[1] = color;
+                    dest[2] = color;
+                    dest[3] = 255;
+                }
                 color++;
                 dest += 4;
             }
@@ -1495,6 +1505,7 @@ void RenderEngineTest::tonemap(ui::Dataspace sourceDataspace, std::function<vec3
                                                                                     std::move(buf),
                                                                             .usePremultipliedAlpha =
                                                                                     true,
+                                                                            .isOpaque = opaqueTenBit,
                                                                     },
                                                     },
                                             .alpha = 1.0f,
@@ -1509,7 +1520,9 @@ void RenderEngineTest::tonemap(ui::Dataspace sourceDataspace, std::function<vec3
     tonemap::Metadata metadata{.displayMaxLuminance = 750.0f};
 
     auto generator = [=](Point location) {
-        const double normColor = static_cast<double>(location.x) / (kGreyLevels - 1);
+        const double normColor = opaqueTenBit
+                ? static_cast<double>((location.x * 1023 + 127) / 255) / 1023
+                : static_cast<double>(location.x) / (kGreyLevels - 1);
         const vec3 rgb = vec3(normColor, normColor, normColor);
 
         const vec3 linearRGB = eotf(rgb);
@@ -2968,6 +2981,17 @@ TEST_P(RenderEngineTest, test_tonemapPQMatches) {
                 static constexpr float kMaxPQLuminance = 10000.f;
                 return color * kMaxPQLuminance;
             });
+}
+
+TEST_P(RenderEngineTest, test_tonemapOpaqueTenBitPQMatches) {
+    if (!GetParam()->apiSupported()) {
+        GTEST_SKIP();
+    }
+
+    initializeRenderEngine();
+    tonemap(ui::Dataspace::BT2020_ITU_PQ,
+            [](vec3 color) { return EOTF_PQ(color); },
+            [](vec3 color, float) { return color * 10000.f; }, true);
 }
 
 TEST_P(RenderEngineTest, test_tonemapHLGMatches) {
