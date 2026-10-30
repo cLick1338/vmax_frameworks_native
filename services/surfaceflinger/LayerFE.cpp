@@ -19,6 +19,8 @@
 #define LOG_TAG "SurfaceFlinger"
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
+#include <cmath>
+
 #include <common/trace.h>
 #include <gui/GLConsumer.h>
 #include <math/vec3.h>
@@ -240,16 +242,22 @@ void LayerFE::prepareBufferStateClientComposition(
     layerSettings.source.buffer.isOpaque = mSnapshot->contentOpaque;
     layerSettings.source.buffer.fence = mSnapshot->acquireFence;
     layerSettings.source.buffer.usePremultipliedAlpha = mSnapshot->premultipliedAlpha;
-    bool hasSmpte2086 = mSnapshot->hdrMetadata.validTypes & HdrMetadata::SMPTE2086;
-    bool hasCta861_3 = mSnapshot->hdrMetadata.validTypes & HdrMetadata::CTA861_3;
+    const float masteringPeak = mSnapshot->hdrMetadata.smpte2086.maxLuminance;
+    const float contentPeak = mSnapshot->hdrMetadata.cta8613.maxContentLightLevel;
+    // Vmax: Ignore unusable peaks without discarding valid alternative metadata.
+    const bool hasSmpte2086 =
+            (mSnapshot->hdrMetadata.validTypes & HdrMetadata::SMPTE2086) &&
+            std::isfinite(masteringPeak) && masteringPeak > 0.f;
+    const bool hasCta861_3 =
+            (mSnapshot->hdrMetadata.validTypes & HdrMetadata::CTA861_3) &&
+            std::isfinite(contentPeak) && contentPeak > 0.f;
     float maxLuminance = 0.f;
     if (hasSmpte2086 && hasCta861_3) {
-        maxLuminance = std::min(mSnapshot->hdrMetadata.smpte2086.maxLuminance,
-                                mSnapshot->hdrMetadata.cta8613.maxContentLightLevel);
+        maxLuminance = std::min(masteringPeak, contentPeak);
     } else if (hasSmpte2086) {
-        maxLuminance = mSnapshot->hdrMetadata.smpte2086.maxLuminance;
+        maxLuminance = masteringPeak;
     } else if (hasCta861_3) {
-        maxLuminance = mSnapshot->hdrMetadata.cta8613.maxContentLightLevel;
+        maxLuminance = contentPeak;
     } else {
         switch (layerSettings.sourceDataspace & HAL_DATASPACE_TRANSFER_MASK) {
             case HAL_DATASPACE_TRANSFER_ST2084:
