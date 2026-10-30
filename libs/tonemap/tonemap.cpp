@@ -17,6 +17,8 @@
 #include <tonemap/tonemap.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <mutex>
 #include <type_traits>
@@ -470,6 +472,8 @@ public:
                 uniform float in_libtonemap_displayMaxLuminance;
                 uniform float in_libtonemap_inputMaxLuminance;
                 uniform float in_libtonemap_hlgGamma;
+                uniform float4 in_libtonemap_pqCurve;
+                uniform float2 in_libtonemap_pqSlopes;
             )");
         switch (sourceDataspaceInt & kTransferMask) {
             case kTransferST2084:
@@ -516,22 +520,12 @@ public:
 
                                     float nits = maxRGB;
 
-                                    float x1 = maxOutLumi * 0.65;
-                                    float y1 = x1;
-
-                                    float x3 = maxInLumi;
-                                    float y3 = maxOutLumi;
-
-                                    float x2 = x1 + (x3 - x1) * 4.0 / 17.0;
-                                    float y2 = maxOutLumi * 0.9;
-
-                                    float greyNorm1 = libtonemap_OETFTone(x1);
-                                    float greyNorm2 = libtonemap_OETFTone(x2);
-                                    float greyNorm3 = libtonemap_OETFTone(x3);
-
-                                    float slope1 = 0;
-                                    float slope2 = (y2 - y1) / (greyNorm2 - greyNorm1);
-                                    float slope3 = (y3 - y2 ) / (greyNorm3 - greyNorm2);
+                                    float x1 = in_libtonemap_pqCurve.x;
+                                    float greyNorm2 = in_libtonemap_pqCurve.y;
+                                    float greyNorm3 = in_libtonemap_pqCurve.z;
+                                    float y2 = in_libtonemap_pqCurve.w;
+                                    float slope2 = in_libtonemap_pqSlopes.x;
+                                    float slope3 = in_libtonemap_pqSlopes.y;
 
                                     if (nits < x1) {
                                         return nits;
@@ -546,7 +540,7 @@ public:
                                     if (greyNits <= greyNorm2) {
                                         nits = (greyNits - greyNorm2) * slope2 + y2;
                                     } else if (greyNits <= greyNorm3) {
-                                        nits = (greyNits - greyNorm3) * slope3 + y3;
+                                        nits = (greyNits - greyNorm3) * slope3 + maxOutLumi;
                                     } else {
                                         nits = maxOutLumi;
                                     }
@@ -615,7 +609,7 @@ public:
         // Hardcode the max content luminance to a "reasonable" level
         static const constexpr float kContentMaxLuminance = 4000.f;
         std::vector<ShaderUniform> uniforms;
-        uniforms.reserve(3);
+        uniforms.reserve(5);
         uniforms.push_back({.name = "in_libtonemap_displayMaxLuminance",
                             .value = buildUniformValue<float>(metadata.displayMaxLuminance)});
         uniforms.push_back({.name = "in_libtonemap_inputMaxLuminance",
@@ -623,6 +617,19 @@ public:
         uniforms.push_back({.name = "in_libtonemap_hlgGamma",
                             .value = buildUniformValue<float>(
                                     computeHlgGamma(metadata.currentDisplayLuminance))});
+        // Vmax: Precompute display-dependent PQ curve constants outside the pixel shader.
+        const float x1 = metadata.displayMaxLuminance * 0.65f;
+        const float x2 = x1 + (kContentMaxLuminance - x1) * 4.f / 17.f;
+        const float y2 = metadata.displayMaxLuminance * 0.9f;
+        const float greyNorm1 = OETF_ST2084(x1);
+        const float greyNorm2 = OETF_ST2084(x2);
+        const float greyNorm3 = OETF_ST2084(kContentMaxLuminance);
+        const std::array<float, 4> curve = {x1, greyNorm2, greyNorm3, y2};
+        const std::array<float, 2> slopes = {
+                (y2 - x1) / (greyNorm2 - greyNorm1),
+                (metadata.displayMaxLuminance - y2) / (greyNorm3 - greyNorm2)};
+        uniforms.push_back({.name = "in_libtonemap_pqCurve", .value = buildUniformValue(curve)});
+        uniforms.push_back({.name = "in_libtonemap_pqSlopes", .value = buildUniformValue(slopes)});
         return uniforms;
     }
 
